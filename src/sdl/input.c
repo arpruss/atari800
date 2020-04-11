@@ -3,6 +3,8 @@
  *
  * Copyright (c) 2001-2002 Jacek Poplawski
  * Copyright (C) 2001-2014 Atari800 development team (see DOC/CREDITS)
+ * Copyright (C) jfroco
+ * COpyright (c) 2020 Alexander Pruss
  *
  * This file is part of the Atari800 emulator project which emulates
  * the Atari 400, 800, 800XL, 130XE, and 5200 8-bit computers.
@@ -77,6 +79,12 @@ static int KBD_STICK_1_LEFT = SDLK_a;
 static int KBD_STICK_1_RIGHT = SDLK_d;
 static int KBD_STICK_1_DOWN = SDLK_s;
 static int KBD_STICK_1_UP = SDLK_w;
+static int JOY_0_TRIGGER1 = 0;
+static int JOY_0_TRIGGER2 = 1;
+static int JOY_0_ASTERISK = 4;
+static int JOY_0_HASH= 3;
+static int JOY_0_START = 7;
+static int JOY_0_SELECT = 5;
 
 /* real joysticks */
 
@@ -223,6 +231,30 @@ int SDL_INPUT_ReadConfig(char *option, char *parameters)
 		return set_real_js_use_hat(2,parameters);
 	else if (strcmp(option, "SDL_JOY_3_USE_HAT") == 0)
 		return set_real_js_use_hat(3,parameters);
+	else if (strcmp(option, "SDL_JOY_0_START") == 0) {
+		if (parameters != NULL) JOY_0_START = atoi(parameters);
+		return TRUE;
+	}
+	else if (strcmp(option, "SDL_JOY_0_SELECT") == 0) {
+		if (parameters != NULL) JOY_0_SELECT = atoi(parameters);
+		return TRUE;
+	}
+	else if (strcmp(option, "SDL_JOY_0_TRIGGER1") == 0) {
+		if (parameters != NULL) JOY_0_TRIGGER1 = atoi(parameters);
+		return TRUE;
+	}
+	else if (strcmp(option, "SDL_JOY_0_TRIGGER2") == 0) {
+		if (parameters != NULL) JOY_0_TRIGGER2 = atoi(parameters);
+		return TRUE;
+	}
+	else if (strcmp(option, "SDL_JOY_0_ASTERISK") == 0) {
+		if (parameters != NULL) JOY_0_ASTERISK = atoi(parameters);
+		return TRUE;
+	}
+	else if (strcmp(option, "SDL_JOY_0_HASH") == 0) {
+		if (parameters != NULL) JOY_0_HASH = atoi(parameters);
+		return TRUE;
+	}
 	else
 		return FALSE;
 }
@@ -238,6 +270,13 @@ void SDL_INPUT_WriteConfig(FILE *fp)
 	fprintf(fp, "SDL_JOY_0_UP=%d\n", KBD_STICK_0_UP);
 	fprintf(fp, "SDL_JOY_0_DOWN=%d\n", KBD_STICK_0_DOWN);
 	fprintf(fp, "SDL_JOY_0_TRIGGER=%d\n", KBD_TRIG_0);
+
+	fprintf(fp, "SDL_JOY_0_SELECT=%d\n", JOY_0_SELECT);
+	fprintf(fp, "SDL_JOY_0_START=%d\n", JOY_0_START);
+	fprintf(fp, "SDL_JOY_0_TRIGGER1=%d\n", JOY_0_TRIGGER1);
+	fprintf(fp, "SDL_JOY_0_TRIGGER2=%d\n", JOY_0_TRIGGER2);
+	fprintf(fp, "SDL_JOY_0_ASTERISK=%d\n", JOY_0_ASTERISK);
+	fprintf(fp, "SDL_JOY_0_HASH=%d\n", JOY_0_HASH);
 
 	fprintf(fp, "SDL_JOY_1_ENABLED=%d\n", PLATFORM_kbd_joy_1_enabled);
 	fprintf(fp, "SDL_JOY_1_LEFT=%d\n", KBD_STICK_1_LEFT);
@@ -677,6 +716,33 @@ int PLATFORM_Keyboard(void)
 	if (kbhits[SDLK_F4])
 		INPUT_key_consol &= ~INPUT_CONSOL_START;
 
+	/* ATARI 5200: Special button combinations for SELECT & START & MENU NAVIGATION*/
+		int select = SDL_JoystickGetButton(joystick[0],JOY_0_SELECT);
+		int start = SDL_JoystickGetButton(joystick[0],JOY_0_START);
+		if (select && start) return AKEY_EXIT;
+		if (!UI_is_active) {
+			if (start) return AKEY_5200_START;
+			int aster = SDL_JoystickGetButton(joystick[0],JOY_0_ASTERISK);
+			if (select && aster) return AKEY_UI;
+			if (aster) return AKEY_5200_ASTERISK;
+			int hash = SDL_JoystickGetButton(joystick[0],JOY_0_HASH);
+			if (select && hash) return AKEY_WARMSTART;
+			if (hash) return AKEY_5200_HASH;
+		} else {
+			if (SDL_JoystickGetButton(joystick[0],JOY_0_TRIGGER2)) return AKEY_ESCAPE;
+			if (select && SDL_JoystickGetButton(joystick[0],JOY_0_ASTERISK)) return AKEY_ESCAPE;
+			if (joystick[0] != NULL) {
+				int hat = SDL_JoystickGetHat(joystick[0], 0);
+				if (hat == SDL_HAT_UP) return AKEY_UP;
+				if (hat == SDL_HAT_DOWN) return AKEY_DOWN;
+				int y = SDL_JoystickGetAxis(joystick[0], 1);
+				if (y < -minjoy) return AKEY_UP;
+				if (y > minjoy) return AKEY_DOWN;
+			}
+		}
+
+    
+    
 	if (key_pressed == 0)
 		return AKEY_NONE;
 
@@ -691,6 +757,8 @@ int PLATFORM_Keyboard(void)
 	case SDLK_F8:
 		UI_alt_function = UI_MENU_MONITOR;
 		break;
+	case SDLK_ESCAPE:
+		if (! UI_is_active) return AKEY_EXIT; else break;
 	case SDLK_F9:
 		return AKEY_EXIT;
 	case SDLK_F10:
@@ -1502,6 +1570,25 @@ static void update_SDL_joysticks(void)
 			}
 		}
 	}
+
+	if (joystick[0] != NULL) {
+		sdl_js_state[0].port = get_SDL_joystick_state(joystick[0]);
+
+		sdl_js_state[0].trig = 0;
+		/* for (i = 0; i < joystick[0]_nbuttons; i++) {
+		 	if (SDL_JoystickGetButton(joystick[0], i)) {
+		 		sdl_js_state[0].trig |= 1 << i;
+		 	}
+		 } */
+		if (SDL_JoystickGetButton(joystick[0], JOY_0_TRIGGER1)) {
+			sdl_js_state[0].trig = 1;
+		}
+		if (SDL_JoystickGetButton(joystick[0], JOY_0_TRIGGER2)) {
+			INPUT_key_shift = 1;
+		}
+
+	}
+    
 }
 
 static void get_platform_PORT(Uint8 *s0, Uint8 *s1, Uint8 *s2, Uint8 *s3)

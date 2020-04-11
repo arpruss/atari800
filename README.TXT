@@ -1,3 +1,18 @@
+Includes modifications from jfroco: https://github.com/jfroco/atari800-rpi
+
+
+(Only player1)
+
+Hotkeys:
+--------
+
+SELECT + START to exit emulator
+SELECT + * (X): Emulator Menu
+SELECT + # (Y): Reset
+
+Use joystick to navigate the emulator MENU plus Trigger 1 (A) to accept and Trigger 2 (B) to go back.
+
+
 Atari800 emulator version 4.2.0
 -------------------------------
 
